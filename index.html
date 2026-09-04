@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  MediaX — Desktop Media Player (standalone front-end prototype)
+  ----------------------------------------------------------------------------
+  FILE MAP
+    index.html  -> markup only. No inline CSS, no inline JS.
+    styles.css  -> design tokens (light + dark) and all section styles.
+    app.js      -> data model, state, command bridge, rendering, events.
+
+  CONVENTIONS USED EVERYWHERE
+    * Any element that JavaScript touches has an id that starts with `mx-`.
+      A quick grep for "mx-" inside app.js shows every DOM dependency.
+    * Purely decorative / layout-only elements use class names only.
+    * Theme is switched by flipping <html data-theme="dark|light">.
+    * Sections below are numbered exactly like the sections in styles.css so
+      the two files can be read side by side.
+
+  DESKTOP ONLY
+    This build targets laptop / desktop landscape screens. There are no
+    mobile drawers any more; instead every size is fluid (clamp()) so the
+    same layout adapts from a 1280px laptop up to a 4K monitor.
+  ============================================================================
+-->
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MediaX — Desktop Media Player</title>
+    <meta
+      name="description"
+      content="MediaX desktop media player UI built with plain HTML, CSS and JavaScript. Ready to be wired to a C/C++ backend."
+    />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- all styling lives in this one external file -->
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+
+  <body>
+    <!--
+      ======================================================================
+      APP SHELL
+      A fixed 3 column grid:
+        [ left sidebar ] [ center player ] [ right playlist ]
+      Column widths use clamp() so every laptop width feels intentional.
+      ======================================================================
+    -->
+    <div class="app">
+      <!-- ==================================================================
+           1. LEFT SIDEBAR
+           brand, search, navigation, playlists, media info
+           ================================================================== -->
+      <aside id="mx-sidebar" class="sidebar">
+        <!-- 1.1 brand row + theme switch -->
+        <header class="brand-row">
+          <div class="brand">
+            <!-- brand mark + wordmark are transparent PNGs, no plate behind -->
+            <img class="brand-logo" src="logo-mark.png" alt="" aria-hidden="true" />
+            <img class="brand-wordmark" src="logo-wordmark.png" alt="MediaX" />
+          </div>
+
+
+          <!-- theme switch: two small buttons, the active one is highlighted -->
+          <div class="theme-switch" role="group" aria-label="Color theme">
+            <button id="mx-theme-light" class="theme-btn" title="Light theme" aria-label="Light theme">
+              <svg viewBox="0 0 24 24" class="ico">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19" />
+              </svg>
+            </button>
+            <button id="mx-theme-dark" class="theme-btn is-active" title="Dark theme" aria-label="Dark theme">
+              <svg viewBox="0 0 24 24" class="ico">
+                <path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" />
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <!-- 1.2 global search (filters the queue on the right) -->
+        <div class="field">
+          <svg viewBox="0 0 24 24" class="ico field-ico"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.4-3.4" /></svg>
+          <input id="mx-search" type="search" placeholder="Search media..." aria-label="Search media" />
+        </div>
+
+        <!-- 1.3 library navigation (these behave like built-in playlists) -->
+        <nav id="mx-nav" class="nav" aria-label="Library sections">
+          <button class="nav-item is-active" data-source="all">
+            <svg viewBox="0 0 24 24" class="ico"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+            <span>All Media</span>
+          </button>
+          <button class="nav-item" data-source="audio">
+            <svg viewBox="0 0 24 24" class="ico"><path d="M9 18V5l10-2v13" /><circle cx="6.5" cy="18" r="2.5" /><circle cx="16.5" cy="16" r="2.5" /></svg>
+            <span>Audio</span>
+          </button>
+          <button class="nav-item" data-source="video">
+            <svg viewBox="0 0 24 24" class="ico"><rect x="3" y="5" width="18" height="14" rx="3" /><path d="M10 9.5l5 2.5-5 2.5z" class="fill" /></svg>
+            <span>Video</span>
+          </button>
+          <button class="nav-item" data-source="recent">
+            <svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg>
+            <span>Recently Played</span>
+          </button>
+        </nav>
+
+        <!-- 1.4 add media (opens the hidden file input below it) -->
+        <button id="mx-add-btn" class="btn-primary">
+          <svg viewBox="0 0 24 24" class="ico"><path d="M12 5v14M5 12h14" /></svg>
+          <span>Add Media</span>
+        </button>
+        <input id="mx-file-input" type="file" accept="audio/*,video/*" multiple hidden />
+
+        <!-- 1.5 user playlists — clicking a row swaps the right hand queue -->
+        <section class="block">
+          <div class="block-head">
+            <h2 class="block-title">Your Playlists</h2>
+            <button id="mx-add-playlist" class="icon-btn xs" aria-label="Create playlist" title="Create playlist">
+              <svg viewBox="0 0 24 24" class="ico"><path d="M12 5v14M5 12h14" /></svg>
+            </button>
+          </div>
+          <!-- rows rendered by app.js -> renderPlaylists() -->
+          <ul id="mx-folders" class="folders"></ul>
+        </section>
+
+        <!-- 1.6 equalizer — presets + custom band sliders.
+             The sliders are wired to real Web Audio BiquadFilter nodes in
+             app.js (section 5b), so the C/C++ engine can later receive the
+             very same gain array through dispatch({type:"SET_EQ_BAND"}). -->
+        <section class="block card eq-card">
+          <div class="block-head">
+            <h2 class="block-title">Equalizer</h2>
+            <button id="mx-eq-power" class="icon-btn xs is-on" aria-label="Toggle equalizer" aria-pressed="true" title="Enable / bypass equalizer">
+              <svg viewBox="0 0 24 24" class="ico"><path d="M12 3v9" /><path d="M6.5 6.5a8 8 0 1011 0" /></svg>
+            </button>
+          </div>
+
+          <!-- preset chips; "Custom" lights up as soon as a slider moves -->
+          <div id="mx-eq-presets" class="eq-presets" role="group" aria-label="Equalizer presets">
+            <button class="eq-chip is-active" data-preset="flat">Flat</button>
+            <button class="eq-chip" data-preset="bass">Bass Boost</button>
+            <button class="eq-chip" data-preset="treble">Treble</button>
+            <button class="eq-chip" data-preset="vocal">Vocal</button>
+            <button class="eq-chip" data-preset="rock">Rock</button>
+            <button class="eq-chip" data-preset="pop">Pop</button>
+            <button class="eq-chip" data-preset="custom">Custom</button>
+          </div>
+
+          <!-- one vertical slider per frequency band, built by app.js -->
+          <div id="mx-eq-bands" class="eq-bands"></div>
+
+          <button id="mx-eq-reset" class="eq-reset">Reset bands</button>
+        </section>
+
+      </aside>
+
+      <!-- ==================================================================
+           2. CENTER COLUMN — player card (stage + built in controls) then
+           the media details card. There is NO separate transport card any
+           more: everything lives inside the player, YouTube style.
+           ================================================================== -->
+      <main class="center">
+        <!-- 2.1 player card ---------------------------------------------- -->
+        <section id="mx-player" class="player-card">
+          <!-- clicking anywhere on the surface toggles play/pause -->
+          <div id="mx-stage" class="stage" role="button" tabindex="0" aria-label="Play or pause (Space)">
+            <!-- Real browser media surface. It plays imported video and audio
+                 files; artwork remains visible behind audio-only files. -->
+            <video id="mx-media" class="stage-media" preload="metadata" playsinline></video>
+
+            <!-- Artwork is the fallback for demo items and imported audio. -->
+            <img id="mx-stage-art" class="stage-art" src="" alt="" />
+
+            <!-- soft vignette so the overlay controls stay readable -->
+            <div class="stage-veil" aria-hidden="true"></div>
+
+            <!-- ripple feedback shown for a moment after every click -->
+            <div id="mx-stage-flash" class="stage-flash" aria-hidden="true">
+              <svg viewBox="0 0 24 24" class="ico"><path d="M8 5l12 7-12 7z" class="fill" /></svg>
+            </div>
+
+            <!-- big center play button, only visible while paused -->
+            <button id="mx-stage-play" class="stage-play" aria-label="Play">
+              <svg viewBox="0 0 24 24" class="ico"><path d="M8 5l12 7-12 7z" class="fill" /></svg>
+            </button>
+
+            <!-- title chip, fades away together with the control bar -->
+            <div class="stage-topbar">
+              <p id="mx-stage-title" class="stage-title">—</p>
+            </div>
+
+            <!-- ============================================================
+                 2.2 OVERLAY CONTROL BAR (the YouTube style chrome)
+                 Auto hides while playing, comes back on hover / focus.
+                 ============================================================ -->
+            <div id="mx-chrome" class="chrome">
+              <!-- seek row -->
+              <div class="chrome-seek">
+                <div id="mx-seek" class="seek" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                  <div class="seek-track">
+                    <div id="mx-seek-buffer" class="seek-buffer"></div>
+                    <div id="mx-seek-fill" class="seek-fill"></div>
+                  </div>
+                  <div id="mx-seek-thumb" class="seek-thumb"></div>
+                  <div id="mx-seek-tip" class="seek-tip tnum" hidden>00:00</div>
+                </div>
+              </div>
+
+              <!-- button row -->
+              <div class="chrome-row">
+                <div class="chrome-left">
+                  <button id="mx-play" class="chrome-btn primary" aria-label="Play / Pause (Space)" title="Play / Pause (Space)">
+                    <svg id="mx-play-ico" viewBox="0 0 24 24" class="ico"><path d="M8 5l12 7-12 7z" class="fill" /></svg>
+                  </button>
+
+                  <button id="mx-prev" class="chrome-btn" aria-label="Previous (P)" title="Previous (P)">
+                    <svg viewBox="0 0 24 24" class="ico"><path d="M18 6v12l-9-6z" class="fill" /><path d="M6 6v12" /></svg>
+                  </button>
+
+                  <button id="mx-next" class="chrome-btn" aria-label="Next (N)" title="Next (N)">
+                    <svg viewBox="0 0 24 24" class="ico"><path d="M6 6v12l9-6z" class="fill" /><path d="M18 6v12" /></svg>
+                  </button>
+
+                  <button id="mx-back10" class="chrome-btn" aria-label="Back 10 seconds" title="Back 10s">
+                    <svg viewBox="0 0 24 24" class="ico"><path d="M11 5L6 9l5 4" /><path d="M6 9h7a5 5 0 110 10H9" /></svg>
+                    <span class="skip-num">10</span>
+                  </button>
+
+                  <button id="mx-fwd10" class="chrome-btn" aria-label="Forward 10 seconds" title="Forward 10s">
+                    <svg viewBox="0 0 24 24" class="ico"><path d="M13 5l5 4-5 4" /><path d="M18 9h-7a5 5 0 100 10h4" /></svg>
+                    <span class="skip-num">10</span>
+                  </button>
+
+                  <!-- volume: the slider expands on hover, like YouTube -->
+                  <div class="volume-group">
+                    <button id="mx-mute" class="chrome-btn" aria-label="Mute (M)" title="Mute (M)">
+                      <svg id="mx-vol-ico" viewBox="0 0 24 24" class="ico"><path d="M5 9v6h4l5 4V5L9 9z" class="fill" /><path d="M17 9.5a3.5 3.5 0 010 5" /></svg>
+                    </button>
+                    <input id="mx-volume" class="volume" type="range" min="0" max="100" value="75" aria-label="Volume" />
+                  </div>
+
+                  <span class="chrome-time tnum">
+                    <span id="mx-elapsed">00:00</span>
+                    <span class="chrome-time-sep">/</span>
+                    <span id="mx-total">00:00</span>
+                  </span>
+                </div>
+
+                <div class="chrome-right">
+                  <button id="mx-shuffle" class="chrome-btn" aria-label="Shuffle" title="Shuffle">
+                    <svg viewBox="0 0 24 24" class="ico"><path d="M16 4h4v4M20 4l-7 7M4 20l7-7M16 20h4v-4M4 4l4 4" /></svg>
+                  </button>
+
+                  <button id="mx-repeat" class="chrome-btn" aria-label="Repeat" title="Repeat">
+                    <svg viewBox="0 0 24 24" class="ico"><path d="M17 2l4 4-4 4" /><path d="M3 11V9a4 4 0 014-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a4 4 0 01-4 4H3" /></svg>
+                  </button>
+
+                  <div class="select-wrap">
+                    <select id="mx-speed" aria-label="Playback speed">
+                      <option value="0.5">0.5x</option>
+                      <option value="0.75">0.75x</option>
+                      <option value="1" selected>1.0x</option>
+                      <option value="1.25">1.25x</option>
+                      <option value="1.5">1.5x</option>
+                      <option value="2">2.0x</option>
+                    </select>
+                    <svg viewBox="0 0 24 24" class="ico select-chev"><path d="M6 9l6 6 6-6" /></svg>
+                  </div>
+
+                  <button id="mx-fullscreen" class="chrome-btn" aria-label="Fullscreen (F)" title="Fullscreen (F)">
+                    <svg viewBox="0 0 24 24" class="ico"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2.3 details card -------------------------------------------- -->
+        <section class="details-card">
+          <!-- left half: cover + description -->
+          <div class="details-main">
+            <div class="details-cover">
+              <img id="mx-details-art" src="" alt="" />
+            </div>
+
+            <div class="details-text">
+              <h2 id="mx-details-title" class="details-title">—</h2>
+              <p id="mx-details-artist" class="details-artist">—</p>
+
+              <ul id="mx-tags" class="tags"><!-- chips rendered by app.js --></ul>
+
+              <p id="mx-details-desc" class="details-desc">—</p>
+            </div>
+          </div>
+
+          <!-- right half: technical metadata -->
+          <div class="details-meta">
+            <h3 class="meta-head">
+              <svg viewBox="0 0 24 24" class="ico"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M8 4v16" /></svg>
+              Media Details
+            </h3>
+
+            <dl class="meta-list">
+              <div class="meta-row"><dt>Resolution</dt><dd id="mx-meta-res">—</dd></div>
+              <div class="meta-row"><dt>Duration</dt><dd id="mx-meta-duration" class="tnum">—</dd></div>
+              <div class="meta-row"><dt>Format</dt><dd id="mx-meta-format">—</dd></div>
+              <div class="meta-row"><dt>File Size</dt><dd id="mx-meta-size">—</dd></div>
+              <div class="meta-row"><dt>Location</dt><dd id="mx-meta-path" class="meta-path">—</dd></div>
+            </dl>
+          </div>
+        </section>
+      </main>
+
+      <!-- ==================================================================
+           3. RIGHT COLUMN — the queue of the currently selected playlist
+           ================================================================== -->
+      <aside id="mx-queue-col" class="queue-col">
+        <section class="card queue-card">
+          <header class="queue-head">
+            <span class="queue-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" class="ico"><path d="M4 7h10M4 12h10M4 17h6" /><path d="M18 8v8" /><circle cx="16.5" cy="17" r="2" /></svg>
+            </span>
+
+            <div class="queue-titles">
+              <!-- name of the playlist selected in the left column -->
+              <h2 id="mx-queue-name" class="queue-name">All Media</h2>
+              <p class="queue-sub"><span id="mx-queue-count">0</span> items · <span id="mx-queue-length">0 min</span></p>
+            </div>
+
+            <!-- playlist management lives here, in exactly one place -->
+            <div class="menu-wrap">
+              <button id="mx-queue-menu-btn" class="icon-btn xs" aria-label="Playlist options" aria-haspopup="true" aria-expanded="false" title="Playlist options">
+                <svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="5" r="1.5" class="fill" /><circle cx="12" cy="12" r="1.5" class="fill" /><circle cx="12" cy="19" r="1.5" class="fill" /></svg>
+              </button>
+
+              <div id="mx-queue-menu" class="menu" role="menu" hidden>
+                <button class="menu-item" data-action="modify" role="menuitem">
+                  <svg viewBox="0 0 24 24" class="ico"><path d="M4 7h11M4 12h7M4 17h7" /><path d="M17 12v8M13 16h8" /></svg>
+                  Modify tracks
+                </button>
+                <button class="menu-item" data-action="rename" role="menuitem">
+                  <svg viewBox="0 0 24 24" class="ico"><path d="M4 20h4l10-10-4-4L4 16z" /><path d="M14 6l4 4" /></svg>
+                  Rename playlist
+                </button>
+                <button class="menu-item" data-action="duplicate" role="menuitem">
+                  <svg viewBox="0 0 24 24" class="ico"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 012-2h10" /></svg>
+                  Duplicate playlist
+                </button>
+                <div class="menu-sep" role="separator"></div>
+                <button class="menu-item danger" data-action="delete" role="menuitem">
+                  <svg viewBox="0 0 24 24" class="ico"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" /></svg>
+                  Delete playlist
+                </button>
+              </div>
+            </div>
+          </header>
+
+
+
+          <!-- rows rendered by app.js -> renderQueue() -->
+          <ul id="mx-queue" class="queue"></ul>
+          <p id="mx-queue-empty" class="empty-note" hidden>No media in this playlist.</p>
+        </section>
+
+        <!-- live playback readout -->
+        <section class="card info-card">
+          <h3 class="meta-head">
+            <svg viewBox="0 0 24 24" class="ico"><path d="M4 14v-2a8 8 0 0116 0v2" /><rect x="3" y="14" width="4" height="6" rx="1.5" /><rect x="17" y="14" width="4" height="6" rx="1.5" /></svg>
+            Playback Info
+          </h3>
+
+          <dl class="meta-list">
+            <div class="meta-row"><dt>Current Time</dt><dd id="mx-info-current" class="tnum">00:00</dd></div>
+            <div class="meta-row"><dt>Total Duration</dt><dd id="mx-info-total" class="tnum">00:00</dd></div>
+            <div class="meta-row"><dt>Playback Speed</dt><dd id="mx-info-speed">1.0x</dd></div>
+            <div class="meta-row"><dt>Bitrate</dt><dd id="mx-info-bitrate">—</dd></div>
+          </dl>
+
+          <!-- small equalizer, bars are created by app.js -->
+          <div id="mx-eq" class="eq" aria-hidden="true"></div>
+        </section>
+      </aside>
+    </div>
+
+    <!-- ======================================================================
+         4. MODAL — used by "Rename playlist", "Create playlist" and
+         "Modify tracks". Only one dialog markup, three different modes.
+         ====================================================================== -->
+    <div id="mx-modal" class="modal" hidden>
+      <div id="mx-modal-backdrop" class="modal-backdrop"></div>
+
+      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="mx-modal-title">
+        <header class="modal-head">
+          <h2 id="mx-modal-title" class="modal-title">Playlist</h2>
+          <button id="mx-modal-close" class="icon-btn xs" aria-label="Close dialog">
+            <svg viewBox="0 0 24 24" class="ico"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </header>
+
+        <!-- mode A: a single text field (create / rename) -->
+        <div id="mx-modal-name" class="modal-body">
+          <label class="modal-label" for="mx-modal-input">Playlist name</label>
+          <input id="mx-modal-input" class="modal-input" type="text" maxlength="40" placeholder="e.g. Late night mix" />
+        </div>
+
+        <!-- mode B: checkbox list of the whole library (modify tracks) -->
+        <div id="mx-modal-picker" class="modal-body" hidden>
+          <p class="modal-hint">Tick the media you want inside this playlist.</p>
+          <ul id="mx-modal-list" class="picker"></ul>
+        </div>
+
+        <footer class="modal-foot">
+          <button id="mx-modal-cancel" class="btn-ghost">Cancel</button>
+          <button id="mx-modal-save" class="btn-primary sm">Save</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ======================================================================
+         5. ROW MENU — floating popover used by the "+" button on every queue
+         row. Lets you add a track to another playlist, or move it out of the
+         currently open playlist into a different one. Contents are built in
+         app.js -> openRowMenu().
+         ====================================================================== -->
+    <div id="mx-row-menu" class="row-menu" role="menu" hidden></div>
+
+    <!-- tiny transient message ("Playing ...", "Playlist deleted") -->
+    <div id="mx-toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
