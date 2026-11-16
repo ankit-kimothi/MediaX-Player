@@ -2,16 +2,19 @@
 #include <iostream>
 #include <cmath>
 
-Equalizer::Equalizer() {
+Equalizer::Equalizer()
+{
     currentBands = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     isEnabled = true;
 }
 
-void Equalizer::setBandGain(int bandIndex, float gainDb) {
+void Equalizer::setBandGain(int bandIndex, float gainDb)
+{
     if (gainDb < -12.0f) gainDb = -12.0f;
     if (gainDb > 12.0f) gainDb = 12.0f;
 
-    switch (bandIndex) {
+    switch (bandIndex)
+        {
         case 0:
             currentBands.bass = gainDb;
             break;
@@ -33,7 +36,8 @@ void Equalizer::setBandGain(int bandIndex, float gainDb) {
     }
 }
 
-void Equalizer::applyPreset(const std::string& presetName) {
+void Equalizer::applyPreset(const std::string& presetName)
+{
     if (presetName == "Bass Boost") {
         currentBands = {6.0f, 4.0f, 0.0f, 0.0f, 0.0f};
     } else if (presetName == "Vocal Booster") {
@@ -45,7 +49,8 @@ void Equalizer::applyPreset(const std::string& presetName) {
     }
 }
 
-void Equalizer::processAudioBuffer(std::vector<float>& buffer) {
+void Equalizer::processAudioBuffer(std::vector<float>& buffer)
+{
     if (!isEnabled) {
         return;
     }
@@ -73,7 +78,8 @@ void Equalizer::processAudioBuffer(std::vector<float>& buffer) {
     }
 }
 
-void Equalizer::displayEQStatus() const {
+void Equalizer::displayEQStatus() const 
+{
     std::cout << "\n--- 5-Band Equalizer Settings ---" << std::endl;
     std::cout << "1. Bass (60Hz):     " << currentBands.bass << " dB" << std::endl;
     std::cout << "2. Low Mid (230Hz): " << currentBands.lowMid << " dB" << std::endl;
